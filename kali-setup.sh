@@ -228,6 +228,7 @@ declare -A pwn=(
     ["ghidra"]="apt"
     ["gdb"]="apt"
     ["radare2"]="apt"
+    ["checksec"]="apt"
     ["Pwntools"]="custom pip pwntools"
 )
 
