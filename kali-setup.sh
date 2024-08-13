@@ -17,7 +17,7 @@ trap cleanup EXIT INT
 
 # Functions for styled output
 underline_echo() {
-    printf "\e[4m%s\e[0m\n" "$1"  # Keep this without a newline, just underlining
+    printf "\e[4m%b\e[0m\n" "$1"  # Keep this without a newline, just underlining
 }
 
 info_echo() {
@@ -188,128 +188,171 @@ parse_options "$@"
 
 
 # ====================
+# Tool Lists with Installation Methods
+# ====================
+
+declare -A basic=(
+    ["p7zip-full"]="apt"
+    ["python3-pip"]="apt"
+    ["VSCodium"]="custom github VSCodium/vscodium"
+    ["linpeas"]="custom linpeas"
+)
+
+declare -A network=(
+    ["nmap"]="apt"
+    ["proxychains4"]="apt"
+    ["ngrok"]="custom ngrok"
+)
+
+declare -A web=(
+    ["ffuf"]="apt"
+    ["wfuzz"]="apt"
+    ["gobuster"]="apt"
+    ["hashid"]="apt"
+    ["hash-identifier"]="apt"
+    ["hashcat"]="apt"
+    ["hydra"]="apt"
+)
+
+declare -A ad=(
+    ["rdesktop"]="apt"
+    ["impacket-scripts"]="apt"
+    ["neo4j"]="apt"
+    ["bloodhound"]="apt"
+    ["evil-winrm"]="apt"
+    ["pkexec"]="apt"
+    ["freerdp2-x11"]="apt"
+)
+
+declare -A pwn=(
+    ["ghidra"]="apt"
+    ["gdb"]="apt"
+    ["radare2"]="apt"
+    ["Pwntools"]="custom pip pwntools"
+)
+
+declare -A wordlist=(
+    ["seclists"]="apt"
+    ["rockyou.txt"]="custom wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -O ~/rockyou.txt"
+)
+
+declare -A extension=(
+    ["Ghostery"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4142024/ghostery-8.11.1.xpi"
+    ["Bitwarden"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4205620/bitwarden_password_manager-2023.12.0.xpi"
+    ["FoxyProxy"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4207660/foxyproxy_standard-8.6.xpi"
+    ["Wappalyzer"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4189626/wappalyzer-6.10.67.xpi"
+    ["User-Agent Switcher"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4098688/user_agent_string_switcher-0.5.0.xpi"
+)
+
+
+# ====================
+# Listing and Installation Functions
+# ====================
+
+# List tools in a category
+list_tools() {
+    local -n tools=$1
+    underline_echo "\nTools in the '$1' category:"
+    for tool in "${!tools[@]}"; do
+        echo "$tool"
+    done
+}
+
+# Install tools in a category
+install_tools() {
+
+    info_echo "\nIntalling $1 tools"
+
+    local -n tools=$1
+    for tool in "${!tools[@]}"; do
+        local command="${tools[$tool]}"
+        if [[ "$command" == apt ]]; then
+            info_echo "Installing $tool via apt..."
+            install_packages "$tool"
+        elif [[ "$command" == custom* ]]; then
+            # Extract the custom command without "custom" keyword
+            command="${command#custom }"
+            custom_install "$command"
+        else
+            error_echo "Unknown installation method for $tool"
+        fi
+    done
+}
+
+# Function to handle custom installations
+custom_install() {
+    IFS=' ' read -r method param1 param2 <<< "$1"
+    case $method in
+        github)
+            install_github_deb "$param1"
+            ;;
+        linpeas)
+            download_linpeas
+            ;;
+        pip)
+            info_echo "Installing $param1 via pip..."
+            pip install "$param1"
+            ;;
+        wget)
+            info_echo "Downloading from $param1"
+            wget "$param1" -O "$param2"
+            ;;
+        firefox)
+            install_extension "$param1"
+            ;;
+        ngrok)
+            info_echo "Installing ngrok..."
+            if ! curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && \
+               echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list && \
+               sudo apt update && sudo apt install ngrok; then
+                error_echo "Failed to install ngrok"
+                return 1
+            fi
+            ;;
+        *)
+            error_echo "Unknown custom installation method: $method"
+            ;;
+    esac
+}
+
+# ====================
 # Main Script Execution
 # ====================
 
-
-# Provide feedback to the user on the selected options
-underline_echo "Selected options:"
-echo  # Add an empty line for better readability
-
-for key in "${!option_states[@]}"; do
-    # Check if the option is enabled
-    if [ "${option_states[$key]}" -eq 1 ]; then
-        status="Enabled"
-        echo "${key^} mode: $(info_echo $status)"
-    else
-        status="Disabled"
-        echo "${key^} mode: $(error_echo $status)"
-    fi
-done
-
-
-# ====================
-# Installation Functions
-# ====================
-
-
-install_basic_tools() {
-    info_echo "\nInstalling basic tools"
-    install_packages p7zip-full python3-pip
-    
-    info_echo "\nInstalling VSCodium..."
-    install_github_deb "VSCodium/vscodium"
-    
-    info_echo "\nDownloading Linpeas in home folder"
-    download_linpeas
-}
-
-install_network_tools() {
-    info_echo "\nInstalling Network tools"
-
-    # Install ngrok
-    if ! curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && \
-       echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list && \
-       sudo apt update && sudo apt install ngrok; then
-        error_echo "Failed to install ngrok"
-        return 1
-    fi
-    
-    install_packages nmap proxychains4
-    
-    info_echo "\nCopying proxychains configuration file"
-    sudo cp ~/proxychains.conf /etc/proxychains.conf
-}
-
-install_web_tools() {
-    info_echo "\nInstalling Web tools"
-    install_packages ffuf wfuzz gobuster hashid hash-identifier hashcat hydra
-}
-
-install_ad_tools() {
-    info_echo "\nInstalling Active Directory tools"
-    install_packages rdesktop impacket-scripts neo4j bloodhound evil-winrm pkexec freerdp2-x11
-}
-
-install_pwn_tools() {
-    info_echo "\nInstalling Pwn/Reverse tools"
-    install_packages ghidra gdb radare2
-
-    info_echo "\nInstalling Pwntools"
-    pip install pwntools
-}
-
-install_wordlists() {
-    info_echo "\nInstalling some wordlists"
-    install_packages seclists
-    
-    info_echo "\nDownloading rockyou.txt in home folder"
-    if ! wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -O ~/rockyou.txt; then
-        error_echo "Failed to download rockyou.txt"
-        return 1
-    fi
-}
-
-install_firefox_extensions() {
-    info_echo "\nInstalling Firefox extensions"
-    install_extension "https://addons.mozilla.org/firefox/downloads/file/4142024/ghostery-8.11.1.xpi"
-    install_extension "https://addons.mozilla.org/firefox/downloads/file/4205620/bitwarden_password_manager-2023.12.0.xpi"
-    install_extension "https://addons.mozilla.org/firefox/downloads/file/4207660/foxyproxy_standard-8.6.xpi"
-    install_extension "https://addons.mozilla.org/firefox/downloads/file/4189626/wappalyzer-6.10.67.xpi"
-    install_extension "https://addons.mozilla.org/firefox/downloads/file/4098688/user_agent_string_switcher-0.5.0.xpi"
-}
-
-# ====================
-# Main Script Execution
-# ====================
-
-# Call the appropriate functions based on the selected options
+# Example usage:
 if [ "${option_states["basic"]}" -eq 1 ] ; then
-    install_basic_tools
+    list_tools basic
+    install_tools basic
 fi
 
 if [ "${option_states["network"]}" -eq 1 ] ; then
-    install_network_tools
+    list_tools network
+    install_tools network
 fi
 
 if [ "${option_states["web"]}" -eq 1 ] ; then
-    install_web_tools
+    list_tools web
+    install_tools web
 fi
 
 if [ "${option_states["ad"]}" -eq 1 ] ; then
-    install_ad_tools
+    list_tools ad
+    install_tools ad
 fi
 
 if [ "${option_states["pwn"]}" -eq 1 ] ; then
-    install_pwn_tools
+    list_tools pwn
+    install_tools pwn
 fi
 
 if [ "${option_states["wordlist"]}" -eq 1 ] ; then
-    install_wordlists
+    list_tools wordlist
+    install_tools wordlist
 fi
 
 if [ "${option_states["extension"]}" -eq 1 ] ; then
-    install_firefox_extensions
+    list_tools extension
+    install_tools extension
 fi
 
 # Final system update and cleanup
