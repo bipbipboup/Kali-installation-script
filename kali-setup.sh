@@ -183,8 +183,24 @@ parse_options() {
     shift $((OPTIND -1))
 }
 
+
+display_options() {
+    # Provide feedback to the user on the selected options
+    underline_echo "Selected options:"
+    for key in "${!option_states[@]}"; do
+        if [[ "${option_states[$key]}" -eq 1 ]]; then
+            echo "${key^} mode: $(info_echo "Enabled")"
+        else
+            echo "${key^} mode: $(error_echo "Disabled")"
+        fi
+    done
+    }
+
+
 # Call the option parsing function
 parse_options "$@"
+
+display_options
 
 
 # ====================
@@ -229,7 +245,7 @@ declare -A pwn=(
     ["gdb"]="apt"
     ["radare2"]="apt"
     ["checksec"]="apt"
-    ["Pwntools"]="custom pip pwntools"
+    ["pwntools"]="pip"
 )
 
 declare -A wordlist=(
@@ -238,11 +254,11 @@ declare -A wordlist=(
 )
 
 declare -A extension=(
-    ["Ghostery"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4142024/ghostery-8.11.1.xpi"
-    ["Bitwarden"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4205620/bitwarden_password_manager-2023.12.0.xpi"
-    ["FoxyProxy"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4207660/foxyproxy_standard-8.6.xpi"
-    ["Wappalyzer"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4189626/wappalyzer-6.10.67.xpi"
-    ["User-Agent Switcher"]="custom firefox https://addons.mozilla.org/firefox/downloads/file/4098688/user_agent_string_switcher-0.5.0.xpi"
+    ["Ghostery"]="firefox https://addons.mozilla.org/firefox/downloads/file/4142024/ghostery-8.11.1.xpi"
+    ["Bitwarden"]="firefox https://addons.mozilla.org/firefox/downloads/file/4205620/bitwarden_password_manager-2023.12.0.xpi"
+    ["FoxyProxy"]="firefox https://addons.mozilla.org/firefox/downloads/file/4207660/foxyproxy_standard-8.6.xpi"
+    ["Wappalyzer"]="firefox https://addons.mozilla.org/firefox/downloads/file/4189626/wappalyzer-6.10.67.xpi"
+    ["User-Agent Switcher"]="firefox https://addons.mozilla.org/firefox/downloads/file/4098688/user_agent_string_switcher-0.5.0.xpi"
 )
 
 
@@ -270,6 +286,12 @@ install_tools() {
         if [[ "$command" == apt ]]; then
             info_echo "Installing $tool via apt..."
             install_packages "$tool"
+        elif [[ "$command" == firefox* ]]; then
+            IFS=' ' read -r method param1 param2 <<< "$command"
+            install_extension "$param1"
+        elif [[ "$command" == pip ]]; then
+            info_echo "Installing $tool via pip..."
+            pip install "$tool"
         elif [[ "$command" == custom* ]]; then
             # Extract the custom command without "custom" keyword
             command="${command#custom }"
@@ -290,16 +312,9 @@ custom_install() {
         linpeas)
             download_linpeas
             ;;
-        pip)
-            info_echo "Installing $param1 via pip..."
-            pip install "$param1"
-            ;;
         wget)
             info_echo "Downloading from $param1"
             wget "$param1" -O "$param2"
-            ;;
-        firefox)
-            install_extension "$param1"
             ;;
         ngrok)
             info_echo "Installing ngrok..."
@@ -320,6 +335,10 @@ custom_install() {
 # Main Script Execution
 # ====================
 
+info_echo "\nUpdating the machine"
+"$(dirname "$0")/clean.sh"
+
+
 # Example usage:
 if [ "${option_states["basic"]}" -eq 1 ] ; then
     list_tools basic
@@ -329,6 +348,7 @@ fi
 if [ "${option_states["network"]}" -eq 1 ] ; then
     list_tools network
     install_tools network
+    sudo cp "$(dirname "$0")/proxychains.conf" /etc/proxychains.conf
 fi
 
 if [ "${option_states["web"]}" -eq 1 ] ; then
@@ -358,4 +378,4 @@ fi
 
 # Final system update and cleanup
 info_echo "\nUpdating the machine, just in case. Finishing setting up"
-~/clean.sh
+"$(dirname "$0")/clean.sh"
