@@ -23,13 +23,15 @@ Before running this script, ensure the following dependencies are installed:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/your-username/kali-setup-script.git
+   git clone https://github.com/bipbipboup/Kali-installation-script.git
    cd kali-setup-script
    ```
 
-2. **Make the Script Executable**:
+2. **Make the Scripts Executable**:
    ```bash
    chmod +x kali-setup.sh
+   chmod +x clean.sh
+
    ```
 
 3. **Run the Script**:
@@ -131,7 +133,7 @@ This script is licensed under the MIT License. See the [LICENSE](LICENSE) file f
 ## Author Information
 
 - **Author**: bipbipboup
-- **GitHub**: [your-username](https://github.com/bipbipboup)
+- **GitHub**: [bipbipboup](https://github.com/bipbipboup)
 
 ## To do
 - [x] Change the path of clean.sh and proxychains.conf to find to be the path of the kali-setup.sh file.
