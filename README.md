@@ -24,7 +24,7 @@ Before running this script, ensure the following dependencies are installed:
 1. **Clone the Repository**:
    ```bash
    git clone https://github.com/bipbipboup/Kali-installation-script.git
-   cd kali-setup-script
+   cd Kali-installation-script
    ```
 
 2. **Make the Scripts Executable**:
