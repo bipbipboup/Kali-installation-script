@@ -1,5 +1,24 @@
 #!/bin/bash
 
+
+# ====================
+# Variables
+# ====================
+
+TOOL_FOLDER="$HOME/tools"
+mkdir -p "$TOOL_FOLDER"
+
+echo "$TOOL_FOLDER"
+
+SCRIPT_FOLDER=$(dirname "$0")
+echo "$SCRIPT_FOLDER"
+
+
+# ====================
+# Utility functions
+# ====================
+
+
 # Ensure sudo access is available and refreshed
 sudo -v
 
@@ -50,65 +69,84 @@ install_extension() {
 }
 
 
-# Function to download and install the latest .deb package from a GitHub repository
-install_github_deb() {
-    REPO=$1  # Define the repository in the format owner/repo
-
-    # Fetch the latest release information from GitHub API
-    latest_release=$(curl --silent "https://api.github.com/repos/$REPO/releases/latest")
-
-    # Extract the download URL for the .deb asset
-    download_url=$(echo "$latest_release" | grep -oP '"browser_download_url": "\K.*?amd64\.deb(?=")')
-
-    if [ -z "$download_url" ]; then  # Check if a .deb file was found
-        error_echo "No .deb file found in the latest release of $REPO."
-        cleanup
-        return 1  # Exit the function with an error code
-    fi
-
-    # Download the .deb package
-    if ! curl -L -o latest_release.deb "${download_url}"; then
-        error_echo "Failed to download $REPO"
-        cleanup
-        return 1  # Exit the function with an error code
-    fi
-
-     # Install the .deb package
-    if ! sudo apt install ./latest_release.deb -y; then
-        error_echo "Failed to install the .deb package for $REPO"
-        cleanup
-        return 1  # Exit the function with an error code
-    fi
-
-    # Clean up the downloaded .deb file
-    rm -rf latest_release.deb
-}
-
-
 install_packages() {
     sudo apt install -y "$@"
 }
 
 
-# Function to download the latest linpeas.sh script
-download_linpeas() {
-    latest_release=$(curl --silent "https://api.github.com/repos/peass-ng/PEASS-ng/releases/latest")
+# ====================
+# Generalized Functions
+# ====================
 
-    # Extract the download URL for linpeas.sh
-    download_url=$(echo "$latest_release" | grep -oP '"browser_download_url": "\K.*?linpeas.sh(?=")')
+# Function to fetch and download files from a GitHub release
+download_github_release_file() {
+    REPO="$1"      # GitHub repository in the format owner/repo
+    PATTERN="$2"   # Pattern to match the desired file(s)
 
-    if [ -z "$download_url" ]; then  # Check if the linpeas.sh file was found
-        error_echo "Could not find linpeas.sh file"
-        return 1  # Exit the function with an error code
+    # Extract repository name for folder creation
+    repo_name=$(basename "$REPO")
+    TARGET_DIR="$TOOL_FOLDER/$repo_name"
+
+    # Fetch the latest release information from GitHub API
+    latest_release=$(curl --silent "https://api.github.com/repos/$REPO/releases/latest")
+
+    # Extract the download URLs for files matching the pattern
+    download_urls=$(echo "$latest_release" | grep -oP '"browser_download_url": "\K.*?'"$PATTERN"'(?=")')
+
+    if [ -z "$download_urls" ]; then
+        error_echo "No files matching $PATTERN found in the latest release of $REPO."
+        return 1
     fi
 
-    # Download linpeas.sh to the home directory
-    if ! curl -L -o ~/linpeas.sh "${download_url}"; then
-        error_echo "Failed to download linpeas.sh"
-        return 1  # Exit the function with an error code
+    # Create the target directory with the repo name if it does not exist
+    mkdir -p "$TARGET_DIR"
+
+    # Download each file
+    for url in $download_urls; do
+        filename=$(basename "$url")
+        filepath="$TARGET_DIR/$filename"
+        if ! curl --silent -L -o "$filepath" "${url}"; then
+            error_echo "Failed to download $filename"
+            return 1
+        fi
+        info_echo "Downloaded $filename to $TARGET_DIR"
+
+        # Check if the file is a gzip archive and decompress it
+        if [[ "$filepath" == *.gz ]]; then
+            info_echo "Decompressing $filename..."
+            if ! gzip -d -f "$filepath"; then
+                error_echo "Failed to decompress $filename"
+                return 1
+            fi
+            info_echo "Decompressed $filename"
+        fi
+    done
+}
+
+
+# Function to install .deb files
+install_deb_files() {
+    REPO="$1"  # Repository name (for folder matching)
+
+    # Define the directory where the .deb files are expected
+    TARGET_DIR="$TOOL_FOLDER/$(basename "$REPO")"
+
+    # Find all .deb files in the target directory
+    deb_files=$(find "$TARGET_DIR" -name "*.deb")
+
+    if [ -z "$deb_files" ]; then
+        error_echo "No .deb files found in $TARGET_DIR."
+        return 1
     fi
 
-    info_echo "Downloaded linpeas.sh to ~/linpeas.sh"
+    # Install each .deb file
+    for deb_file in $deb_files; do
+        if ! sudo apt install "$deb_file" -y; then
+            error_echo "Failed to install $deb_file"
+            return 1
+        fi
+        info_echo "Installed $deb_file"
+    done
 }
 
 
@@ -210,14 +248,16 @@ display_options
 declare -A basic=(
     ["p7zip-full"]="apt"
     ["python3-pip"]="apt"
-    ["VSCodium"]="custom github VSCodium/vscodium"
-    ["linpeas"]="custom linpeas"
+    ["VSCodium"]="custom github VSCodium/vscodium amd64.deb"
+    ["linpeas"]="custom github peass-ng/PEASS-ng linpeas.sh"
+    ["winpeas"]="custom github peass-ng/PEASS-ng winPEASany.exe"
 )
 
 declare -A network=(
     ["nmap"]="apt"
     ["proxychains4"]="apt"
     ["ngrok"]="custom ngrok"
+    ["chisel"]="custom github jpillora/chisel amd64.gz"
 )
 
 declare -A web=(
@@ -250,7 +290,7 @@ declare -A pwn=(
 
 declare -A wordlist=(
     ["seclists"]="apt"
-    ["rockyou.txt"]="custom wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -O ~/rockyou.txt"
+    ["rockyou.txt"]="custom wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt $TOOL_FOLDER/rockyou.txt"
 )
 
 declare -A extension=(
@@ -268,7 +308,7 @@ declare -A extension=(
 
 # List tools in a category
 list_tools() {
-    local -n tools=$1
+    local -n tools="$1"
     underline_echo "\nTools in the '$1' category:"
     for tool in "${!tools[@]}"; do
         echo "$tool"
@@ -280,7 +320,7 @@ install_tools() {
 
     info_echo "\nIntalling $1 tools"
 
-    local -n tools=$1
+    local -n tools="$1"
     for tool in "${!tools[@]}"; do
         local command="${tools[$tool]}"
         if [[ "$command" == apt ]]; then
@@ -307,10 +347,16 @@ custom_install() {
     IFS=' ' read -r method param1 param2 <<< "$1"
     case $method in
         github)
-            install_github_deb "$param1"
+            download_github_release_file "$param1" "$param2"
+            if [[ "$param2" == *"deb"* ]]; then
+                install_deb_files "$param1"
+            fi
             ;;
         linpeas)
             download_linpeas
+            ;;
+        chisel)
+            download_chisel
             ;;
         wget)
             info_echo "Downloading from $param1"
@@ -336,8 +382,7 @@ custom_install() {
 # ====================
 
 info_echo "\nUpdating the machine"
-"$(dirname "$0")/clean.sh"
-
+"$SCRIPT_FOLDER/clean.sh"
 
 # Example usage:
 if [ "${option_states["basic"]}" -eq 1 ] ; then
@@ -348,7 +393,7 @@ fi
 if [ "${option_states["network"]}" -eq 1 ] ; then
     list_tools network
     install_tools network
-    sudo cp "$(dirname "$0")/proxychains.conf" /etc/proxychains.conf
+    sudo cp "$SCRIPT_FOLDER/proxychains.conf" /etc/proxychains.conf
 fi
 
 if [ "${option_states["web"]}" -eq 1 ] ; then
@@ -378,4 +423,4 @@ fi
 
 # Final system update and cleanup
 info_echo "\nUpdating the machine, just in case. Finishing setting up"
-"$(dirname "$0")/clean.sh"
+"$SCRIPT_FOLDER/clean.sh"
